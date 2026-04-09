@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIBE 団体管理</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ヘッダー -->
+  <header class="app-header">
+    <span class="app-title">BIBE 団体管理</span>
+    <button class="demo-btn" onclick="loadDemo()">デモデータ読込</button>
+  </header>
+
+  <!-- タブナビ -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="tab-dashboard">ダッシュボード</button>
+    <button class="tab-btn" data-tab="tab-schedule">日程調整</button>
+    <button class="tab-btn" data-tab="tab-attendance">出席管理</button>
+    <button class="tab-btn" data-tab="tab-members">メンバー</button>
+  </nav>
+
+  <!-- ========== ダッシュボード ========== -->
+  <div id="tab-dashboard" class="tab-content active">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-num" id="stat-members">0</div>
+        <div class="stat-label">メンバー数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-events">0</div>
+        <div class="stat-label">イベント数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-rate">0%</div>
+        <div class="stat-label">全体出席率</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-next" style="font-size:1rem;">-</div>
+        <div class="stat-label">次回イベント</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>出席ランキング</h2>
+      </div>
+      <div id="ranking-list"></div>
+    </div>
+  </div>
+
+  <!-- ========== 日程調整 ========== -->
+  <div id="tab-schedule" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <h2>イベント一覧</h2>
+        <button class="btn btn-accent" onclick="openEventModal()">+ イベント作成</button>
+      </div>
+    </div>
+    <div id="schedule-list"></div>
+  </div>
+
+  <!-- ========== 出席管理 ========== -->
+  <div id="tab-attendance" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <h2>出席管理</h2>
+        <span style="color:var(--text-light);font-size:0.88rem;">各イベントの出欠を記録してください</span>
+      </div>
+    </div>
+    <div id="attendance-list"></div>
+  </div>
+
+  <!-- ========== メンバー管理 ========== -->
+  <div id="tab-members" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <h2>メンバー一覧</h2>
+        <button class="btn btn-accent" onclick="openMemberModal()">+ メンバー追加</button>
+      </div>
+    </div>
+    <div id="members-list"></div>
+  </div>
+
+  <!-- ========== モーダル: メンバー ========== -->
+  <div id="modal-member" class="modal-overlay" onclick="if(event.target===this)closeMemberModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-member-title">メンバー追加</h3>
+        <button class="modal-close" onclick="closeMemberModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="member-id">
+        <div class="form-group">
+          <label>名前 *</label>
+          <input type="text" id="member-name" placeholder="例: 田中 太郎">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>役職</label>
+            <input type="text" id="member-role" placeholder="例: 代表">
+          </div>
+          <div class="form-group">
+            <label>学年</label>
+            <select id="member-year">
+              <option value="">選択</option>
+              <option value="1年">1年</option>
+              <option value="2年">2年</option>
+              <option value="3年">3年</option>
+              <option value="4年">4年</option>
+              <option value="院1年">院1年</option>
+              <option value="院2年">院2年</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>備考</label>
+          <textarea id="member-note" rows="2" placeholder="学部など"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeMemberModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="saveMember()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== モーダル: イベント作成 ========== -->
+  <div id="modal-event" class="modal-overlay" onclick="if(event.target===this)closeEventModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>イベント作成</h3>
+        <button class="modal-close" onclick="closeEventModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>タイトル *</label>
+          <input type="text" id="event-title" placeholder="例: 5月 定例ミーティング">
+        </div>
+        <div class="form-group">
+          <label>開催日 *</label>
+          <input type="date" id="event-date">
+        </div>
+        <div class="form-group">
+          <label>候補日（日程調整用・任意）</label>
+          <div style="display:flex;gap:8px;">
+            <input type="date" id="candidate-date" style="flex:1;">
+            <button class="btn btn-sm btn-primary" onclick="addCandidateDate()">追加</button>
+          </div>
+          <div class="date-tags" id="candidate-tags"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeEventModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="saveEvent()">作成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== モーダル: 日程回答 ========== -->
+  <div id="modal-response" class="modal-overlay" onclick="if(event.target===this)closeResponseModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>日程回答: <span id="response-event-title"></span></h3>
+        <button class="modal-close" onclick="closeResponseModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="response-form"></div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeResponseModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="saveScheduleResponses()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
