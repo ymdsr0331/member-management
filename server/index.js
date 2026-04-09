@@ -30,17 +30,23 @@ app.use(helmet({
 app.use(cors({ origin: false })); // 同一オリジンのみ
 app.use(express.json({ limit: "1mb" }));
 
-// ログインは厳しめにレート制限
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15分
+  windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: "ログイン試行回数が多すぎます。15分後に再試行してください" },
+  skip: () => false,
+  keyGenerator: (req, res) => {
+    return req.ip || req.connection.remoteAddress;
+  },
 });
 
-// API全般のレート制限
 const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1分
+  windowMs: 1 * 60 * 1000,
   max: 100,
+  skip: () => false,
+  keyGenerator: (req, res) => {
+    return req.ip || req.connection.remoteAddress;
+  },
 });
 
 // ========== 静的ファイル配信 ==========
