@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1775569604945,
+    "username": "sora",
+    "password": "$2a$12$Ku49ielzUoPJ1ZOxtg3nh.WDwh/PVKvcwpi/EiXia58bSkdDueTKG",
+    "role": "admin",
+    "createdAt": "2026-04-07T13:46:44.945Z"
+  },
+  {
+    "id": 1775569867325,
+    "username": "admin",
+    "password": "$2a$12$I8SokCL5rWWpCAQ9wq3kje5VH/xscoTqLvMJd0cnUAhQL2ZqmO9kC",
+    "role": "admin",
+    "createdAt": "2026-04-07T13:51:07.569Z"
+  }
+]
