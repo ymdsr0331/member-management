@@ -117,9 +117,4 @@ const API = {
   async getStats() {
     return this._fetch("/api/events/stats");
   },
-
-  // --- デモ ---
-  async loadDemoData() {
-    return this._fetch("/api/events/demo", { method: "POST" });
-  },
 };

@@ -18,7 +18,6 @@ function bindStaticEvents() {
   });
 
   // ヘッダー
-  document.getElementById("btn-demo").addEventListener("click", loadDemo);
   document.getElementById("btn-logout").addEventListener("click", handleLogout);
 
   // メンバー・イベント作成ボタン
@@ -606,21 +605,6 @@ async function onAttendanceChange(select) {
   try {
     await API.setAttendance(eventId, memberId, status);
     renderAttendance();
-  } catch (err) {
-    alert(err.message);
-  }
-}
-
-// ========== デモデータ ==========
-async function loadDemo() {
-  try {
-    const members = await API.getMembers();
-    if (members && members.length > 0) {
-      if (!confirm("既存データを上書きしますか？")) return;
-    }
-    await API.loadDemoData();
-    renderDashboard();
-    alert("デモデータを読み込みました");
   } catch (err) {
     alert(err.message);
   }
