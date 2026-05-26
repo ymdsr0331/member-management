@@ -1,134 +1,164 @@
 // ========== イベントAPIルート ==========
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
 const auth = require("../middleware/auth");
 const { validateEvent, validateAttendance, validateScheduleResponse } = require("../middleware/validate");
+const { pool } = require("../db");
 const router = express.Router();
 
-const EVENTS_FILE = path.join(__dirname, "../data/events.json");
-const MEMBERS_FILE = path.join(__dirname, "../data/members.json");
-
-function loadEvents() {
-  if (!fs.existsSync(EVENTS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(EVENTS_FILE, "utf8"));
-}
-
-function saveEvents(events) {
-  fs.writeFileSync(EVENTS_FILE, JSON.stringify(events, null, 2), "utf8");
-}
-
-function loadMembers() {
-  if (!fs.existsSync(MEMBERS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(MEMBERS_FILE, "utf8"));
+// イベント行をフロントエンド形式に変換
+async function buildEvent(row) {
+  const attResult = await pool.query(
+    "SELECT member_id AS \"memberId\", status FROM attendance WHERE event_id = $1", [row.id]
+  );
+  const resResult = await pool.query(
+    "SELECT member_id AS \"memberId\", available_dates AS \"availableDates\" FROM responses WHERE event_id = $1", [row.id]
+  );
+  return {
+    id: row.id,
+    title: row.title,
+    type: row.type,
+    date: row.date,
+    candidateDates: row.candidate_dates || [],
+    attendance: attResult.rows,
+    responses: resResult.rows,
+  };
 }
 
 // GET /api/events
-router.get("/", auth, (req, res) => {
-  res.json(loadEvents());
+router.get("/", auth, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM events ORDER BY id DESC");
+    const events = [];
+    for (const row of result.rows) {
+      events.push(await buildEvent(row));
+    }
+    res.json(events);
+  } catch (err) {
+    console.error("イベント取得エラー:", err.message);
+    res.status(500).json({ error: "サーバーエラーが発生しました" });
+  }
 });
 
 // POST /api/events
-router.post("/", auth, validateEvent, (req, res) => {
-  const events = loadEvents();
-  const event = {
-    id: Date.now(),
-    title: req.body.title,
-    type: "meeting",
-    date: req.body.date,
-    candidateDates: req.body.candidateDates || [],
-    attendance: [],
-    responses: [],
-  };
-  events.unshift(event);
-  saveEvents(events);
-  res.status(201).json(event);
+router.post("/", auth, validateEvent, async (req, res) => {
+  try {
+    const event = {
+      id: Date.now(),
+      title: req.body.title,
+      type: "meeting",
+      date: req.body.date,
+      candidateDates: req.body.candidateDates || [],
+    };
+
+    await pool.query(
+      "INSERT INTO events (id, title, type, date, candidate_dates) VALUES ($1, $2, $3, $4, $5)",
+      [event.id, event.title, event.type, event.date, JSON.stringify(event.candidateDates)]
+    );
+
+    res.status(201).json({ ...event, attendance: [], responses: [] });
+  } catch (err) {
+    console.error("イベント作成エラー:", err.message);
+    res.status(500).json({ error: "サーバーエラーが発生しました" });
+  }
 });
 
 // DELETE /api/events/:id
-router.delete("/:id", auth, (req, res) => {
-  const id = Number(req.params.id);
-  const events = loadEvents();
-  const filtered = events.filter((e) => e.id !== id);
-  if (filtered.length === events.length) {
-    return res.status(404).json({ error: "イベントが見つかりません" });
+router.delete("/:id", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const result = await pool.query("DELETE FROM events WHERE id = $1 RETURNING id", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "イベントが見つかりません" });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("イベント削除エラー:", err.message);
+    res.status(500).json({ error: "サーバーエラーが発生しました" });
   }
-  saveEvents(filtered);
-  res.json({ success: true });
 });
 
 // POST /api/events/:id/attendance
-router.post("/:id/attendance", auth, validateAttendance, (req, res) => {
-  const id = Number(req.params.id);
-  const { memberId, status } = req.body;
-  const events = loadEvents();
-  const ev = events.find((e) => e.id === id);
-  if (!ev) return res.status(404).json({ error: "イベントが見つかりません" });
+router.post("/:id/attendance", auth, validateAttendance, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { memberId, status } = req.body;
 
-  if (!ev.attendance) ev.attendance = [];
-
-  if (status === "none") {
-    ev.attendance = ev.attendance.filter((a) => a.memberId !== memberId);
-  } else {
-    const existing = ev.attendance.find((a) => a.memberId === memberId);
-    if (existing) {
-      existing.status = status;
-    } else {
-      ev.attendance.push({ memberId, status });
+    const ev = await pool.query("SELECT * FROM events WHERE id = $1", [id]);
+    if (ev.rows.length === 0) {
+      return res.status(404).json({ error: "イベントが見つかりません" });
     }
-  }
 
-  saveEvents(events);
-  res.json(ev);
+    if (status === "none") {
+      await pool.query("DELETE FROM attendance WHERE event_id = $1 AND member_id = $2", [id, memberId]);
+    } else {
+      await pool.query(
+        `INSERT INTO attendance (event_id, member_id, status) VALUES ($1, $2, $3)
+         ON CONFLICT (event_id, member_id) DO UPDATE SET status = $3`,
+        [id, memberId, status]
+      );
+    }
+
+    const updated = await buildEvent(ev.rows[0]);
+    res.json(updated);
+  } catch (err) {
+    console.error("出席記録エラー:", err.message);
+    res.status(500).json({ error: "サーバーエラーが発生しました" });
+  }
 });
 
 // POST /api/events/:id/responses
-router.post("/:id/responses", auth, validateScheduleResponse, (req, res) => {
-  const id = Number(req.params.id);
-  const { memberId, availableDates } = req.body;
-  const events = loadEvents();
-  const ev = events.find((e) => e.id === id);
-  if (!ev) return res.status(404).json({ error: "イベントが見つかりません" });
+router.post("/:id/responses", auth, validateScheduleResponse, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { memberId, availableDates } = req.body;
 
-  if (!ev.responses) ev.responses = [];
+    const ev = await pool.query("SELECT * FROM events WHERE id = $1", [id]);
+    if (ev.rows.length === 0) {
+      return res.status(404).json({ error: "イベントが見つかりません" });
+    }
 
-  const existing = ev.responses.find((r) => r.memberId === memberId);
-  if (existing) {
-    existing.availableDates = availableDates;
-  } else {
-    ev.responses.push({ memberId, availableDates });
+    await pool.query(
+      `INSERT INTO responses (event_id, member_id, available_dates) VALUES ($1, $2, $3)
+       ON CONFLICT (event_id, member_id) DO UPDATE SET available_dates = $3`,
+      [id, memberId, JSON.stringify(availableDates)]
+    );
+
+    const updated = await buildEvent(ev.rows[0]);
+    res.json(updated);
+  } catch (err) {
+    console.error("日程回答エラー:", err.message);
+    res.status(500).json({ error: "サーバーエラーが発生しました" });
   }
-
-  saveEvents(events);
-  res.json(ev);
 });
 
 // GET /api/stats
-router.get("/stats", auth, (req, res) => {
-  const events = loadEvents();
-  const members = loadMembers();
+router.get("/stats", auth, async (req, res) => {
+  try {
+    const members = await pool.query("SELECT id FROM members");
+    const memberStats = [];
 
-  // 出席統計
-  const memberStats = members.map((m) => {
-    let total = 0;
-    let present = 0;
-    events.forEach((ev) => {
-      if (!ev.attendance) return;
-      const record = ev.attendance.find((a) => a.memberId === m.id);
-      if (record) {
-        total++;
-        if (record.status === "present") present++;
-      }
-    });
-    return {
-      memberId: m.id,
-      total,
-      present,
-      rate: total > 0 ? Math.round((present / total) * 100) : 0,
-    };
-  });
+    for (const m of members.rows) {
+      const stats = await pool.query(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) AS present
+         FROM attendance WHERE member_id = $1`,
+        [m.id]
+      );
+      const total = parseInt(stats.rows[0].total) || 0;
+      const present = parseInt(stats.rows[0].present) || 0;
+      memberStats.push({
+        memberId: m.id,
+        total,
+        present,
+        rate: total > 0 ? Math.round((present / total) * 100) : 0,
+      });
+    }
 
-  res.json({ memberStats });
+    res.json({ memberStats });
+  } catch (err) {
+    console.error("統計取得エラー:", err.message);
+    res.status(500).json({ error: "サーバーエラーが発生しました" });
+  }
 });
 
 module.exports = router;

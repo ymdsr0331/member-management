@@ -6,14 +6,11 @@ const helmet = require("helmet");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
-const fs = require("fs");
+const bcrypt = require("bcryptjs");
+const { pool, initDB } = require("./db");
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-
-// データディレクトリ確保
-const dataDir = path.join(__dirname, "data");
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 // ========== セキュリティミドルウェア ==========
 app.use(helmet({
@@ -64,17 +61,7 @@ app.use((err, req, res, next) => {
 });
 
 // ========== 管理者自動作成 ==========
-function ensureAdmin() {
-  const bcrypt = require("bcryptjs");
-  const usersFile = path.join(__dirname, "data/users.json");
-
-  let users = [];
-  if (fs.existsSync(usersFile)) {
-    users = JSON.parse(fs.readFileSync(usersFile, "utf8"));
-  }
-
-  // 複数の管理者を環境変数から作成
-  let adminCount = 0;
+async function ensureAdmin() {
   for (let i = 1; i <= 10; i++) {
     const usernameKey = i === 1 ? "ADMIN_USERNAME" : `ADMIN_USERNAME_${i}`;
     const passwordKey = i === 1 ? "ADMIN_PASSWORD" : `ADMIN_PASSWORD_${i}`;
@@ -82,26 +69,30 @@ function ensureAdmin() {
     const adminUser = process.env[usernameKey];
     const adminPass = process.env[passwordKey];
 
-    if (adminUser && adminPass && !users.find((u) => u.username === adminUser)) {
-      users.push({
-        id: Date.now() + i,
-        username: adminUser,
-        password: bcrypt.hashSync(adminPass, 12),
-        role: "admin",
-        createdAt: new Date().toISOString(),
-      });
-      console.log(`管理者 "${adminUser}" を自動作成しました`);
-      adminCount++;
-    }
-  }
+    if (!adminUser || !adminPass) continue;
 
-  if (adminCount > 0) {
-    fs.writeFileSync(usersFile, JSON.stringify(users, null, 2), "utf8");
+    const existing = await pool.query("SELECT id FROM users WHERE username = $1", [adminUser]);
+    if (existing.rows.length > 0) continue;
+
+    const hashed = bcrypt.hashSync(adminPass, 12);
+    await pool.query(
+      "INSERT INTO users (id, username, password, role, created_at) VALUES ($1, $2, $3, $4, NOW())",
+      [Date.now() + i, adminUser, hashed, "admin"]
+    );
+    console.log(`管理者 "${adminUser}" を自動作成しました`);
   }
 }
 
-ensureAdmin();
+// ========== サーバー起動 ==========
+async function start() {
+  await initDB();
+  await ensureAdmin();
+  app.listen(PORT, () => {
+    console.log(`団体管理サーバー起動: http://localhost:${PORT}`);
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`団体管理サーバー起動: http://localhost:${PORT}`);
+start().catch((err) => {
+  console.error("起動エラー:", err.message);
+  process.exit(1);
 });
