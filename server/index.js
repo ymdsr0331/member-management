@@ -62,7 +62,7 @@ app.use((err, req, res, next) => {
 
 // ========== 管理者自動作成 ==========
 async function ensureAdmin() {
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 100; i++) {
     const usernameKey = i === 1 ? "ADMIN_USERNAME" : `ADMIN_USERNAME_${i}`;
     const passwordKey = i === 1 ? "ADMIN_PASSWORD" : `ADMIN_PASSWORD_${i}`;
 
